@@ -1,7 +1,11 @@
 import logging
+from typing import Optional, Sequence
 
 from anndata import AnnData
+import numpy as np
 from scvi.model.base import BaseModelClass, UnsupervisedTrainingMixin, VAEMixin
+import torch
+
 
 from ._mymodule import MyModule
 
@@ -59,3 +63,35 @@ class MyModel(VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
         self.init_params_ = self._get_init_params(locals())
 
         logger.info("The model has been initialized")
+
+    @torch.no_grad()
+    def get_latent_time(
+        self,
+        adata: Optional[AnnData] = None,
+        indices: Optional[Sequence[int]] = None,
+        give_mean: bool = True,
+        mc_samples: int = 5000,
+        batch_size: Optional[int] = None
+    ) -> np.ndarray:
+        r"""
+        """
+        if self.is_trained_ is False:
+            raise RuntimeError("Please train the model first.")
+        
+        adata = self._validate_anndata(adata)
+        scdl = self._make_data_loader(
+            adata=adata, indices=indices, batch_size=batch_size
+        )
+        latent = []
+        for tensors in scdl:
+            inference_inputs = self.module._get_inference_input(tensors)
+            outputs = self.module.inference(**inference_inputs)
+            qt_m = outputs["qt_m"]
+            qt_v = outputs["qt_v"]
+            t = outputs["t"]
+
+            if give_mean:
+                t = qt_m
+
+            latent += [t.cpu()]
+        return torch.cat(latent).numpy()
