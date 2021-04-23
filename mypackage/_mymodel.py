@@ -3,7 +3,7 @@ from typing import Optional, Sequence
 
 from anndata import AnnData
 import numpy as np
-from scvi.model.base import BaseModelClass, UnsupervisedTrainingMixin, VAEMixin
+from scvi.model.base import BaseModelClass, UnsupervisedTrainingMixin, RNASeqMixin, VAEMixin
 import torch
 
 
@@ -12,7 +12,7 @@ from ._mymodule import MyModule
 logger = logging.getLogger(__name__)
 
 
-class MyModel(VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
+class MyModel(RNASeqMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
     """
     Skeleton for an scvi-tools model.
 

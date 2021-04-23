@@ -103,7 +103,7 @@ class MyModule(BaseModuleClass):
         return input_dict
 
     @auto_move_data
-    def inference(self, x):
+    def inference(self, x, n_samples=1):
         """
         High level inference method.
 
