@@ -67,9 +67,17 @@ class MyModule(BaseModuleClass):
             n_hidden=n_hidden,
             dropout_rate=dropout_rate,
         )
+        # t encoder goes from n-input dimensional data to 1-d temporal space
+        self.t_encoder = Encoder(
+            n_input,
+            1,
+            n_layers=1,
+            n_hidden=n_hidden,
+            dropout_rate=dropout_rate
+        )
         # decoder goes from n_latent-dimensional space to n_input-d data
         self.decoder = DecoderSCVI(
-            n_latent,
+            n_latent + 1,
             n_input,
             n_layers=n_layers,
             n_hidden=n_hidden,
@@ -85,10 +93,12 @@ class MyModule(BaseModuleClass):
     def _get_generative_input(self, tensors, inference_outputs):
         z = inference_outputs["z"]
         library = inference_outputs["library"]
+        t = inference_outputs['t']
 
         input_dict = {
             "z": z,
             "library": library,
+            "t": t
         }
         return input_dict
 
@@ -104,16 +114,18 @@ class MyModule(BaseModuleClass):
         # get variational parameters via the encoder networks
         qz_m, qz_v, z = self.z_encoder(x_)
         ql_m, ql_v, library = self.l_encoder(x_)
+        qt_m, qt_v, t = self.t_encoder(x_)
 
-        outputs = dict(z=z, qz_m=qz_m, qz_v=qz_v, ql_m=ql_m, ql_v=ql_v, library=library)
+        outputs = dict(z=z, qz_m=qz_m, qz_v=qz_v, ql_m=ql_m, ql_v=ql_v, library=library, qt_m=qt_m, qt_v=qt_v, t=t)
         return outputs
 
     @auto_move_data
-    def generative(self, z, library):
+    def generative(self, z, library, t):
         """Runs the generative model."""
 
         # form the parameters of the ZINB likelihood
-        px_scale, _, px_rate, px_dropout = self.decoder("gene", z, library)
+        decoder_input = torch.cat([z, t], dim=-1)
+        px_scale, _, px_rate, px_dropout = self.decoder("gene", decoder_input, library)
         px_r = torch.exp(self.px_r)
 
         return dict(
@@ -131,10 +143,15 @@ class MyModule(BaseModuleClass):
         local_l_mean = tensors[_CONSTANTS.LOCAL_L_MEAN_KEY]
         local_l_var = tensors[_CONSTANTS.LOCAL_L_VAR_KEY]
 
+        local_t_mean = tensors[_CONSTANTS.CONT_COVS_KEY]
+        local_t_var = torch.ones_like(local_l_var)
+
         qz_m = inference_outputs["qz_m"]
         qz_v = inference_outputs["qz_v"]
         ql_m = inference_outputs["ql_m"]
         ql_v = inference_outputs["ql_v"]
+        qt_m = inference_outputs["qt_m"]
+        qt_v = inference_outputs["qt_v"]
         px_rate = generative_outputs["px_rate"]
         px_r = generative_outputs["px_r"]
         px_dropout = generative_outputs["px_dropout"]
@@ -151,6 +168,11 @@ class MyModule(BaseModuleClass):
             Normal(local_l_mean, torch.sqrt(local_l_var)),
         ).sum(dim=1)
 
+        kl_divergence_t = kl(
+            Normal(qt_m, torch.sqrt(qt_v)),
+            Normal(local_t_mean, torch.sqrt(local_t_var))
+        )
+
         reconst_loss = (
             -ZeroInflatedNegativeBinomial(mu=px_rate, theta=px_r, zi_logits=px_dropout)
             .log_prob(x)
@@ -158,7 +180,7 @@ class MyModule(BaseModuleClass):
         )
 
         kl_local_for_warmup = kl_divergence_z
-        kl_local_no_warmup = kl_divergence_l
+        kl_local_no_warmup = kl_divergence_l + kl_divergence_t
 
         weighted_kl_local = kl_weight * kl_local_for_warmup + kl_local_no_warmup
 
