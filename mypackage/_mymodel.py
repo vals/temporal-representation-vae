@@ -70,8 +70,8 @@ class MyModel(RNASeqMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
         adata: Optional[AnnData] = None,
         indices: Optional[Sequence[int]] = None,
         give_mean: bool = True,
-        mc_samples: int = 5000,
-        batch_size: Optional[int] = None
+        batch_size: Optional[int] = None,
+        return_std = False
     ) -> np.ndarray:
         r"""
         """
@@ -83,6 +83,7 @@ class MyModel(RNASeqMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
             adata=adata, indices=indices, batch_size=batch_size
         )
         latent = []
+        latent_std = []
         for tensors in scdl:
             inference_inputs = self.module._get_inference_input(tensors)
             outputs = self.module.inference(**inference_inputs)
@@ -94,4 +95,9 @@ class MyModel(RNASeqMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
                 t = qt_m
 
             latent += [t.cpu()]
+            latent_std += [torch.sqrt(qt_v).cpu()]
+
+        if return_std:
+            return torch.cat(latent).numpy(), torch.cat(latent_std).numpy()
+
         return torch.cat(latent).numpy()
