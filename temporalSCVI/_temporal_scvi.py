@@ -7,12 +7,12 @@ from scvi.model.base import BaseModelClass, UnsupervisedTrainingMixin, RNASeqMix
 import torch
 
 
-from ._mymodule import MyModule
+from ._random_time import RandomTime
 
 logger = logging.getLogger(__name__)
 
 
-class MyModel(RNASeqMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
+class TemporalSCVI(RNASeqMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
     """
     Skeleton for an scvi-tools model.
 
@@ -47,11 +47,11 @@ class MyModel(RNASeqMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
         n_layers: int = 1,
         **model_kwargs,
     ):
-        super(MyModel, self).__init__(adata)
+        super(TemporalSCVI, self).__init__(adata)
 
         # self.summary_stats provides information about anndata dimensions and other tensor info
 
-        self.module = MyModule(
+        self.module = RandomTime(
             n_input=self.summary_stats["n_vars"],
             n_hidden=n_hidden,
             n_latent=n_latent,
