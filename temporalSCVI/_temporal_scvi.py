@@ -1,9 +1,12 @@
 import logging
+from functools import partial
 from typing import Optional, Sequence
 
 from anndata import AnnData
 import numpy as np
+import pandas as pd
 from scvi.model.base import BaseModelClass, UnsupervisedTrainingMixin, RNASeqMixin, VAEMixin
+from scvi.model._utils import _get_var_names_from_setup_anndata
 import torch
 
 
@@ -101,3 +104,51 @@ class TemporalSCVI(RNASeqMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelCl
             return torch.cat(latent).numpy(), torch.cat(latent_std).numpy()
 
         return torch.cat(latent).numpy()
+
+    @torch.no_grad()
+    def get_temporal_expression(
+        self,
+        start: float,
+        end: float,
+        steps: int = 128,
+        n_samples: int = 128,
+        adata: Optional[AnnData] = None,
+        gene_list: Optional[Sequence[str]] = None
+    ):
+        r"""
+        Generate expression levels over time by integrating out non-temporal variation.
+        """
+        adata = self._validate_anndata(adata)
+
+        all_genes = _get_var_names_from_setup_anndata(adata)
+        if gene_list is None:
+            gene_mask = slice(None)
+            filtered_gene_list = all_genes
+        else:
+            gene_mask = [True if gene in gene_list else False for gene in all_genes]
+            filtered_gene_list = [gene for gene in gene_list if gene in all_genes]
+
+        idx = np.random.choice(np.arange(adata.shape[0]), n_samples)
+        
+        # Sample cell representations
+        t_Z = torch.from_numpy(self.get_latent_representation(adata=adata, indices=idx, give_mean=False))
+        t_Z_input = t_Z.repeat_interleave(steps, 0)
+        replicate = torch.arange(n_samples)[:, None].repeat_interleave(steps, 0)
+
+        # Grid over time points
+        cont_covs = torch.linspace(start, end, steps)[:, None]
+        cont_covs_input = cont_covs.repeat(n_samples, 1)
+
+        library_input = torch.ones((steps, 1)).repeat(n_samples, 1)
+        generative_output = self.module.generative(t_Z_input, library_input, cont_covs_input)
+
+        output = generative_output['px_rate']
+        output = output[..., gene_mask]
+        output = output.detach().cpu().numpy()
+
+        df1 = pd.DataFrame({'time': cont_covs_input.numpy()[:, 0], 'sample': replicate.numpy()[:, 0]})
+        df2 = pd.DataFrame(output, columns=filtered_gene_list)
+        dfb = pd.concat((df1, df2), axis=1)
+        long_dfb = dfb.melt(id_vars=['time', 'sample'], var_name='gene', value_name='px_scale')
+
+        return long_dfb
