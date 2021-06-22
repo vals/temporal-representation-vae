@@ -116,7 +116,17 @@ class RandomTime(BaseModuleClass):
         ql_m, ql_v, library = self.l_encoder(x_)
         qt_m, qt_v, t = self.t_encoder(x_)
 
-        outputs = dict(z=z, qz_m=qz_m, qz_v=qz_v, ql_m=ql_m, ql_v=ql_v, library=library, qt_m=qt_m, qt_v=qt_v, t=t)
+        outputs = dict(
+            z=z,
+            qz_m=qz_m, 
+            qz_v=qz_v, 
+            ql_m=ql_m, 
+            ql_v=ql_v, 
+            library=library, 
+            qt_m=qt_m, 
+            qt_v=qt_v, 
+            t=t
+        )
         return outputs
 
     @auto_move_data
@@ -143,8 +153,8 @@ class RandomTime(BaseModuleClass):
         local_l_mean = tensors[_CONSTANTS.LOCAL_L_MEAN_KEY]
         local_l_var = tensors[_CONSTANTS.LOCAL_L_VAR_KEY]
 
-        local_t_mean = tensors[_CONSTANTS.CONT_COVS_KEY]
-        local_t_var = torch.ones_like(local_l_var)
+        local_t_mean = tensors[_CONSTANTS.CONT_COVS_KEY][:, [0]]
+        local_t_var = tensors[_CONSTANTS.CONT_COVS_KEY][:, [1]]
 
         qz_m = inference_outputs["qz_m"]
         qz_v = inference_outputs["qz_v"]
